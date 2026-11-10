@@ -129,8 +129,43 @@ python src/scale.py
 python src/fit.py        # -> out/fit/
 python src/evaluate.py   # -> out/eval/
 python src/demo.py       # -> out/demo/
+python src/simulate.py --press-at 60 --depth 12   # -> out/sim/
 pytest tests/
 ```
+
+## Simulate your own press
+
+Press the fitted virtual bottle at any position and depth, with no video involved, and watch it deform and recover:
+
+```bash
+python src/simulate.py --press-at 60 --depth 12 --tool pen --cap on
+python src/simulate.py --press-at 40 --depth 14 --compare-cap      # cap on and off side by side
+python src/simulate.py --trajectory my_press.csv --press-at 60     # custom press: columns t_s, depth_mm
+python src/simulate.py --interactive                               # sliders for position and depth
+```
+
+| Argument | Meaning | Default |
+|---|---|---|
+| `--press-at` | Press position in mm from the base | 60 |
+| `--depth` | Peak indentation in mm | 12 |
+| `--tool` | `pen` (r = 2.5 mm) or `finger` (r = 8.0 mm) | `pen` |
+| `--cap` | `on` (internal air on) or `off` (pure shell bending) | `on` |
+| `--steps` | Snapshots for loading; same number for unloading | 12 |
+| `--compare-cap` | Solves both cap on and cap off side-by-side | False |
+| `--interactive` | Matplotlib GUI with position/depth sliders and toggle | False |
+| `--out` | Output directory | `out/sim/<auto-name>/` |
+
+**Outputs generated in `--out`:**
+- `sim.mp4`: Matplotlib 3D mesh animation through loading and elastic recovery with depth, pen force, and $\Delta p$ text overlays.
+- `side_view.png`: Simulated top silhouette at peak indentation depth with the undeformed rest reference line.
+- `profile.png`: Normalized drop $w/w_{\text{tip}}$ vs distance from the tool at peak.
+- `force_depth.png`: Pen force vs depth curve (labeled "model prediction, unverified (no force sensor)").
+- `summary.json`: Inputs, peak force, $\Delta p$, $\Delta V$, profile ratios at 15–21, 30–39, and 45–60 mm, and any range extrapolation warnings.
+
+**Caveats, in plain words:**
+- **Forces are model predictions:** There was no force sensor during filming; all computed forces are derived from the elastic shell and gas pressure model and have no force measurement behind them.
+- **Recovery is instantaneous:** In this quasi-static elastic model, unloading returns immediately to rest, which matches the video only to within one frame ($\le 67\text{ ms}$).
+- **Extrapolation warnings:** Press depths beyond $17\text{ mm}$ (the deepest press in the experimental data) or positions outside $56\text{–}98\text{ mm}$ from the base (the range of observed presses), or within $15\text{ mm}$ of either cylinder end, are model extrapolations.
 
 ## Runtimes & Reproducibility
 

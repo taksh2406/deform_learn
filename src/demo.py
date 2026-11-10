@@ -782,7 +782,20 @@ def render_all_concatenated(
         badge="Part 2: Cap Effect",
     )
 
-    # 5. Conclusion card
+    # 5. Standalone simulation card
+    card_sim = create_title_card(
+        title="Part 3: Standalone Simulation",
+        subtitle="Standalone simulation: press at 40 mm from base, 14 mm depth, cap on vs off (model prediction, no video).",
+        bullets=[
+            "Quasi-static loading from 0 to 14 mm and elastic recovery back to 0 mm",
+            "Left: Capped (Air On, peak force 11.60 N, Delta p = 1.52 kPa)",
+            "Right: Uncapped (Air Off, peak force 8.93 N, Delta p = 0.0 kPa)",
+            "Internal air stiffens bottle and narrows profile near the tool",
+        ],
+        badge="Part 3: Simulation",
+    )
+
+    # 6. Conclusion card
     card5 = create_title_card(
         title="Evaluation Summary & Key Results",
         subtitle="Benchmark on Held-Out Test Suite",
@@ -810,7 +823,35 @@ def render_all_concatenated(
     c2_path = write_card_video(card2, 2.5, cards_dir / "card2.mp4")
     c3_path = write_card_video(card3, 2.5, cards_dir / "card3.mp4")
     c4_path = write_card_video(card4, 3.0, cards_dir / "card4.mp4")
+    c_sim_path = write_card_video(card_sim, 3.0, cards_dir / "card_sim.mp4")
     c5_path = write_card_video(card5, 3.5, cards_dir / "card5.mp4")
+
+    # Check for standalone simulation segment
+    sim_comp_src = Path("out/sim/compare_press_x40_d14_pen/sim.mp4")
+    sim_segment_path = cards_dir / "sim_segment.mp4"
+    if sim_comp_src.exists() and not (sim_segment_path.exists() and sim_segment_path.stat().st_size > 10000):
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-stream_loop",
+                "3",
+                "-i",
+                str(sim_comp_src),
+                "-vf",
+                "scale=1920:720:force_original_aspect_ratio=decrease,pad=1920:720:(ow-iw)/2:(oh-ih)/2:color=#0f172a",
+                "-r",
+                str(fps),
+                "-c:v",
+                "libx264",
+                "-pix_fmt",
+                "yuv420p",
+                "-t",
+                "10.0",
+                str(sim_segment_path),
+            ],
+            check=True,
+        )
 
     # Build concat file for ffmpeg
     def rel_to_cards(p: Path) -> str:
@@ -825,6 +866,9 @@ def render_all_concatenated(
         f.write(f"file '{rel_to_cards(fresh_001711_path)}'\n")
         f.write(f"file '{rel_to_cards(c4_path)}'\n")
         f.write(f"file '{rel_to_cards(cap_effect_path)}'\n")
+        if sim_segment_path.exists():
+            f.write(f"file '{rel_to_cards(c_sim_path)}'\n")
+            f.write(f"file '{rel_to_cards(sim_segment_path)}'\n")
         f.write(f"file '{rel_to_cards(c5_path)}'\n")
 
     cmd = [
