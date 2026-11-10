@@ -1,0 +1,28 @@
+video_dir: data/raw
+fps: 29.97003
+p_atm_mpa: 0.101325
+gas_exponent: 1.4   # adiabatic (compression takes ~1-2 s, heat diffusion ~56 s); 1.0 = isothermal, run as sensitivity
+bottle: {diameter_mm: 70, cyl_length_mm: 220, label_mm_from_base: [115, 220], volume_mm3: 1.0e6}
+pen_radius_mm: 2.5        # update from M2's pixel measurement
+finger_radius_mm: 8
+tool_exclusion_mm: {pen: 8, finger: 15}
+# body_x: [left, right]; right = base end of the silhouette. VERIFY every value on a rest frame.
+# diameter_px: rough estimates; measure in M2.
+clips:
+  # ---- 10 Nov session (zoomed; bottle moved between clips; camera static) ----
+  "001531": {file: VID20261110001531.mp4, n_frames: 279, role: fit_scale,   cap: on,  tool: pen, body_x: [710,1600], edge_rows: [370,680], otsu_s: 94, rest_frames: [55,79], contact: [81,141],  peak_px: 91,  diameter_px: 544} # was edge_rows: [220,1060], rest_frames: [10,40]
+  "001614": {file: VID20261110001614.mp4, n_frames: 232, role: fit_ratio,   cap: off, tool: pen, body_x: [440,1290], edge_rows: [460,680], otsu_s: 89, rest_frames: [71,95], contact: [98,131],  peak_px: 111, diameter_px: 521, note: "edge near pen hidden by container; use base-side stations only"} # was edge_rows: [220,1060], rest_frames: [10,40]
+  "001656": {file: VID20261110001656.mp4, n_frames: 238, role: fit_ratio,   cap: off, tool: pen, body_x: [775,1700], edge_rows: [370,680], otsu_s: 88, rest_frames: [42,66], contact: [94,132],  peak_px: 115, diameter_px: 564} # was edge_rows: [220,1060], rest_frames: [10,40]
+  "001711": {file: VID20261110001711.mp4, n_frames: 221, role: test,        cap: off, tool: pen, body_x: [780,1700], edge_rows: [420,680], otsu_s: 93, rest_frames: [81,105], contact: [110,149], peak_px: 121, diameter_px: 562, note: "post-release residual -8.5 px: inspect"} # was edge_rows: [220,1060], otsu_s: 90, rest_frames: [10,40]
+  "001730": {file: VID20261110001730.mp4, n_frames: 245, role: fit_scale,   cap: on,  tool: pen, body_x: [565,1490], edge_rows: [380,680], otsu_s: 88, rest_frames: [93,117], contact: [119,169], peak_px: 136, diameter_px: 587} # was body_x: [530,1490], edge_rows: [220,1060], otsu_s: 86, rest_frames: [10,40]
+  # ---- 9 Nov session A (capped; tool 56-81 mm from base, i.e. a different press location) ----
+  "161638": {file: VID20261109161638.mp4, n_frames: 113, role: noise, cap: on, tool: none, body_x: [464,1292], edge_rows: [130,700], otsu_s: 99, rest_frames: [0,10]}
+  "161655": {file: VID20261109161655.mp4, n_frames: 247, role: test, cap: on, tool: pen,    body_x: [450,1315], edge_rows: [190,600], otsu_s: 93, rest_frames: [62,86], contact: [94,172], peak_px: 69,  diameter_px: 490, note: "camera settles f0-20; re-measure body_x on f30"} # was body_x: [450,1270], edge_rows: [130,700], rest_frames: [30,70]
+  "161708": {file: VID20261109161708.mp4, n_frames: 236, role: test, cap: on, tool: pen,    body_x: [465,1291], edge_rows: [130,700], otsu_s: 95, rest_frames: [28,52], contact: [54,139], peak_px: 106, diameter_px: 490} # was rest_frames: [10,30]
+  "161747": {file: VID20261109161747.mp4, n_frames: 257, role: test, cap: on, tool: pen,    body_x: [463,1277], edge_rows: [190,700], otsu_s: 95, rest_frames: [53,77], contact: [84,170], peak_px: 117, diameter_px: 490, ignore_tool_before: 70} # was edge_rows: [130,700], rest_frames: [20,45]
+  "161802": {file: VID20261109161802.mp4, n_frames: 177, role: test, cap: on, tool: pen,    body_x: [492,1289], edge_rows: [130,700], otsu_s: 89, rest_frames: [38,62], contact: [67,109], peak_px: 73,  diameter_px: 490} # was rest_frames: [20,45]
+  "161824": {file: VID20261109161824.mp4, n_frames: 124, role: test_finger, cap: on, tool: finger, body_x: [454,1137], edge_rows: [130,700], otsu_s: 81, rest_frames: [1,15], contact: [27,73], diameter_px: 490} # was rest_frames: [0,12]
+  # ---- 9 Nov session B (capped; re-framed) ----
+  "161853": {file: VID20261109161853.mp4, n_frames: 154, role: test_finger, cap: on, tool: finger, body_x: [620,1360], edge_rows: [280,520], otsu_s: 82, rest_frames: [4,28], contact: [33,86], diameter_px: 480, camera_moved: true} # was edge_rows: [200,760], otsu_s: 75, rest_frames: [5,25]
+  "161904": {file: VID20261109161904.mp4, n_frames: 354, role: test, cap: on, tool: pen, body_x: [690,1360], edge_rows: [200,760], otsu_s: 85, rest_frames: [28,52], contact: [60,103], peak_px: 113, diameter_px: 480, note: "earlier tracker failed here; by eye: 0.6 at 20 mm, 0.33 at 40 mm"} # was otsu_s: 76, rest_frames: [10,35]
+

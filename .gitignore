@@ -1,0 +1,9 @@
+out/*
+!out/demo/
+out/demo/*
+!out/demo/all.mp4
+BUILD_SPEC.md
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/

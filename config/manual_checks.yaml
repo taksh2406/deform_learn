@@ -1,0 +1,599 @@
+clips:
+  '001531':
+  - col: 1039
+    frame: 67
+    region: 20mm
+    stage: rest
+    y_px: 534
+  - col: 1199
+    frame: 67
+    region: 40mm
+    stage: rest
+    y_px: 528
+  - col: 1400
+    frame: 67
+    region: base
+    stage: rest
+    y_px: 530
+  - col: 1039
+    frame: 106
+    region: 20mm
+    stage: mid
+    y_px: 569
+  - col: 1199
+    frame: 106
+    region: 40mm
+    stage: mid
+    y_px: 552
+  - col: 1400
+    frame: 106
+    region: base
+    stage: mid
+    y_px: 542
+  - col: 1039
+    frame: 131
+    region: 20mm
+    stage: peak
+    y_px: 590
+  - col: 1199
+    frame: 131
+    region: 40mm
+    stage: peak
+    y_px: 562
+  - col: 1400
+    frame: 131
+    region: base
+    stage: peak
+    y_px: 552
+  '001614':
+  - col: 736
+    frame: 83
+    region: 20mm
+    stage: rest
+    y_px: 539
+  - col: 896
+    frame: 83
+    region: 40mm
+    stage: rest
+    y_px: 536
+  - col: 1130
+    frame: 83
+    region: base
+    stage: rest
+    y_px: 554
+  - col: 736
+    frame: 111
+    region: 20mm
+    stage: mid
+    y_px: 572
+  - col: 896
+    frame: 111
+    region: 40mm
+    stage: mid
+    y_px: 558
+  - col: 1130
+    frame: 111
+    region: base
+    stage: mid
+    y_px: 572
+  - col: 736
+    frame: 125
+    region: 20mm
+    stage: peak
+    y_px: 614
+  - col: 896
+    frame: 125
+    region: 40mm
+    stage: peak
+    y_px: 582
+  - col: 1130
+    frame: 125
+    region: base
+    stage: peak
+    y_px: 566
+  '001656':
+  - col: 1129
+    frame: 54
+    region: 20mm
+    stage: rest
+    y_px: 480
+  - col: 1290
+    frame: 54
+    region: 40mm
+    stage: rest
+    y_px: 479
+  - col: 1530
+    frame: 54
+    region: base
+    stage: rest
+    y_px: 472
+  - col: 1129
+    frame: 108
+    region: 20mm
+    stage: mid
+    y_px: 519
+  - col: 1290
+    frame: 108
+    region: 40mm
+    stage: mid
+    y_px: 502
+  - col: 1530
+    frame: 108
+    region: base
+    stage: mid
+    y_px: 492
+  - col: 1129
+    frame: 122
+    region: 20mm
+    stage: peak
+    y_px: 564
+  - col: 1290
+    frame: 122
+    region: 40mm
+    stage: peak
+    y_px: 530
+  - col: 1530
+    frame: 122
+    region: base
+    stage: peak
+    y_px: 500
+  '001711':
+  - col: 1120
+    frame: 93
+    region: 20mm
+    stage: rest
+    y_px: 482
+  - col: 1280
+    frame: 93
+    region: 40mm
+    stage: rest
+    y_px: 476
+  - col: 1530
+    frame: 93
+    region: base
+    stage: rest
+    y_px: 476
+  - col: 1120
+    frame: 125
+    region: 20mm
+    stage: mid
+    y_px: 527
+  - col: 1280
+    frame: 125
+    region: 40mm
+    stage: mid
+    y_px: 511
+  - col: 1530
+    frame: 125
+    region: base
+    stage: mid
+    y_px: 496
+  - col: 1120
+    frame: 141
+    region: 20mm
+    stage: peak
+    y_px: 577
+  - col: 1280
+    frame: 141
+    region: 40mm
+    stage: peak
+    y_px: 531
+  - col: 1530
+    frame: 141
+    region: base
+    stage: peak
+    y_px: 506
+  '001730':
+  - col: 939
+    frame: 105
+    region: 20mm
+    stage: rest
+    y_px: 491
+  - col: 1100
+    frame: 105
+    region: 40mm
+    stage: rest
+    y_px: 482
+  - col: 1340
+    frame: 105
+    region: base
+    stage: rest
+    y_px: 480
+  - col: 939
+    frame: 138
+    region: 20mm
+    stage: mid
+    y_px: 540
+  - col: 1100
+    frame: 138
+    region: 40mm
+    stage: mid
+    y_px: 516
+  - col: 1340
+    frame: 138
+    region: base
+    stage: mid
+    y_px: 504
+  - col: 939
+    frame: 157
+    region: 20mm
+    stage: peak
+    y_px: 562
+  - col: 1100
+    frame: 157
+    region: 40mm
+    stage: peak
+    y_px: 526
+  - col: 1340
+    frame: 157
+    region: base
+    stage: peak
+    y_px: 516
+  '161638':
+  - col: 664
+    frame: 5
+    region: 20mm
+    stage: rest
+    y_px: 254
+  - col: 864
+    frame: 5
+    region: 40mm
+    stage: rest
+    y_px: 246
+  - col: 1180
+    frame: 5
+    region: base
+    stage: rest
+    y_px: 240
+  - col: 664
+    frame: 25
+    region: 20mm
+    stage: mid
+    y_px: 255
+  - col: 864
+    frame: 25
+    region: 40mm
+    stage: mid
+    y_px: 246
+  - col: 1180
+    frame: 25
+    region: base
+    stage: mid
+    y_px: 240
+  - col: 664
+    frame: 45
+    region: 20mm
+    stage: peak
+    y_px: 254
+  - col: 864
+    frame: 45
+    region: 40mm
+    stage: peak
+    y_px: 242
+  - col: 1180
+    frame: 45
+    region: base
+    stage: peak
+    y_px: 243
+  '161655':
+  - col: 887
+    frame: 74
+    region: 20mm
+    stage: rest
+    y_px: 254
+  - col: 1027
+    frame: 74
+    region: 40mm
+    stage: rest
+    y_px: 256
+  - col: 1200
+    frame: 74
+    region: base
+    stage: rest
+    y_px: 263
+  - col: 887
+    frame: 131
+    region: 20mm
+    stage: mid
+    y_px: 286
+  - col: 1027
+    frame: 131
+    region: 40mm
+    stage: mid
+    y_px: 268
+  - col: 1200
+    frame: 131
+    region: base
+    stage: mid
+    y_px: 269
+  - col: 887
+    frame: 163
+    region: 20mm
+    stage: peak
+    y_px: 297
+  - col: 1027
+    frame: 163
+    region: 40mm
+    stage: peak
+    y_px: 285
+  - col: 1200
+    frame: 163
+    region: base
+    stage: peak
+    y_px: 278
+  '161708':
+  - col: 988
+    frame: 40
+    region: 20mm
+    stage: rest
+    y_px: 260
+  - col: 1128
+    frame: 40
+    region: 40mm
+    stage: rest
+    y_px: 253
+  - col: 1200
+    frame: 40
+    region: base
+    stage: rest
+    y_px: 254
+  - col: 988
+    frame: 92
+    region: 20mm
+    stage: mid
+    y_px: 286
+  - col: 1128
+    frame: 92
+    region: 40mm
+    stage: mid
+    y_px: 274
+  - col: 1200
+    frame: 92
+    region: base
+    stage: mid
+    y_px: 272
+  - col: 988
+    frame: 131
+    region: 20mm
+    stage: peak
+    y_px: 322
+  - col: 1128
+    frame: 131
+    region: 40mm
+    stage: peak
+    y_px: 292
+  - col: 1200
+    frame: 131
+    region: base
+    stage: peak
+    y_px: 288
+  '161747':
+  - col: 884
+    frame: 65
+    region: 20mm
+    stage: rest
+    y_px: 249
+  - col: 1024
+    frame: 65
+    region: 40mm
+    stage: rest
+    y_px: 250
+  - col: 1187
+    frame: 65
+    region: base
+    stage: rest
+    y_px: 253
+  - col: 884
+    frame: 120
+    region: 20mm
+    stage: mid
+    y_px: 296
+  - col: 1024
+    frame: 120
+    region: 40mm
+    stage: mid
+    y_px: 281
+  - col: 1187
+    frame: 120
+    region: base
+    stage: mid
+    y_px: 274
+  - col: 884
+    frame: 157
+    region: 20mm
+    stage: peak
+    y_px: 320
+  - col: 1024
+    frame: 157
+    region: 40mm
+    stage: peak
+    y_px: 298
+  - col: 1187
+    frame: 157
+    region: base
+    stage: peak
+    y_px: 282
+  '161802':
+  - col: 1026
+    frame: 50
+    region: 20mm
+    stage: rest
+    y_px: 260
+  - col: 1166
+    frame: 50
+    region: 40mm
+    stage: rest
+    y_px: 268
+  - col: 1209
+    frame: 50
+    region: base
+    stage: rest
+    y_px: 266
+  - col: 1026
+    frame: 80
+    region: 20mm
+    stage: mid
+    y_px: 281
+  - col: 1166
+    frame: 80
+    region: 40mm
+    stage: mid
+    y_px: 278
+  - col: 1209
+    frame: 80
+    region: base
+    stage: mid
+    y_px: 272
+  - col: 1026
+    frame: 93
+    region: 20mm
+    stage: peak
+    y_px: 305
+  - col: 1166
+    frame: 93
+    region: 40mm
+    stage: peak
+    y_px: 292
+  - col: 1209
+    frame: 93
+    region: base
+    stage: peak
+    y_px: 270
+  '161824':
+  - col: 900
+    frame: 8
+    region: 20mm
+    stage: rest
+    y_px: 254
+  - col: 1040
+    frame: 8
+    region: 40mm
+    stage: rest
+    y_px: 258
+  - col: 1057
+    frame: 8
+    region: base
+    stage: rest
+    y_px: 266
+  - col: 900
+    frame: 45
+    region: 20mm
+    stage: mid
+    y_px: 318
+  - col: 1040
+    frame: 45
+    region: 40mm
+    stage: mid
+    y_px: 289
+  - col: 1057
+    frame: 45
+    region: base
+    stage: mid
+    y_px: 292
+  - col: 900
+    frame: 64
+    region: 20mm
+    stage: peak
+    y_px: 373
+  - col: 1040
+    frame: 64
+    region: 40mm
+    stage: peak
+    y_px: 320
+  - col: 1057
+    frame: 64
+    region: base
+    stage: peak
+    y_px: 317
+  '161853':
+  - col: 1062
+    frame: 16
+    region: 20mm
+    stage: rest
+    y_px: 323
+  - col: 1225
+    frame: 16
+    region: 40mm
+    stage: rest
+    y_px: 318
+  - col: 1280
+    frame: 16
+    region: base
+    stage: rest
+    y_px: 332
+  - col: 1062
+    frame: 51
+    region: 20mm
+    stage: mid
+    y_px: 344
+  - col: 1225
+    frame: 51
+    region: 40mm
+    stage: mid
+    y_px: 336
+  - col: 1280
+    frame: 51
+    region: base
+    stage: mid
+    y_px: 340
+  - col: 1062
+    frame: 70
+    region: 20mm
+    stage: peak
+    y_px: 377
+  - col: 1225
+    frame: 70
+    region: 40mm
+    stage: peak
+    y_px: 354
+  - col: 1280
+    frame: 70
+    region: base
+    stage: peak
+    y_px: 352
+  '161904':
+  - col: 1110
+    frame: 40
+    region: 20mm
+    stage: rest
+    y_px: 327
+  - col: 1250
+    frame: 40
+    region: 40mm
+    stage: rest
+    y_px: 326
+  - col: 1280
+    frame: 40
+    region: base
+    stage: rest
+    y_px: 330
+  - col: 1110
+    frame: 78
+    region: 20mm
+    stage: mid
+    y_px: 369
+  - col: 1250
+    frame: 78
+    region: 40mm
+    stage: mid
+    y_px: 342
+  - col: 1280
+    frame: 78
+    region: base
+    stage: mid
+    y_px: 354
+  - col: 1110
+    frame: 96
+    region: 20mm
+    stage: peak
+    y_px: 389
+  - col: 1250
+    frame: 96
+    region: 40mm
+    stage: peak
+    y_px: 364
+  - col: 1280
+    frame: 96
+    region: base
+    stage: peak
+    y_px: 362
