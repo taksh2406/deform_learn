@@ -20,8 +20,13 @@ import subprocess
 import sys
 from typing import Any, Dict, List, Optional, Tuple
 
+# Ensure Matplotlib config directory is writable
+if "MPLCONFIGDIR" not in os.environ:
+    os.environ["MPLCONFIGDIR"] = "/tmp/mpl"
+
 import matplotlib
-matplotlib.use("Agg")
+if "--interactive" not in sys.argv:
+    matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
@@ -460,12 +465,16 @@ def run_interactive(
     """Launch interactive matplotlib window with sliders for position, depth, and cap state."""
     if not os.environ.get("DISPLAY"):
         print("[INFO] Interactive mode requires a display (DISPLAY environment variable not set).")
+        print("To run simulations headlessly, use the standard command-line options (e.g. --press-at, --depth, --compare-cap).")
         return
 
-    matplotlib.use("TkAgg")
     from matplotlib.widgets import CheckButtons, Slider
 
-    fig = plt.figure(figsize=(11, 7))
+    try:
+        fig = plt.figure(figsize=(11, 7))
+    except Exception as e:
+        print(f"[ERROR] Could not open GUI display window: {e}")
+        return
     ax3d = fig.add_subplot(121, projection="3d")
     ax2d = fig.add_subplot(122)
     plt.subplots_adjust(bottom=0.25)
