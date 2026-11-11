@@ -2,6 +2,11 @@ out/*
 !out/demo/
 out/demo/*
 !out/demo/all.mp4
+!out/demo/fresh_instance.mp4
+!out/demo/cap_effect.mp4
+!out/fit/
+out/fit/*
+!out/fit/params.json
 BUILD_SPEC.md
 __pycache__/
 *.pyc
