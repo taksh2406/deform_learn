@@ -39,7 +39,7 @@ def test_synthetic_air_off_recovery_and_invariance():
     ]
 
     def synth_loss_rho(rho: float) -> float:
-        sols = sim.solve_sequence(depths, tool_x_mm=tx, kappa=1.0, rho=rho, air_on=False, gtol=1e-4)
+        sols = sim.solve_sequence(depths, tool_x_mm=tx, kappa=1.0, rho=rho, air_on=False)
         return sum(
             np.sum(huber_loss((sim.extract_profile(s, stations_mm=stations, mode="top_vertex") - w)[mask]))
             for s, w in zip(sols, synth_obs)
@@ -53,7 +53,7 @@ def test_synthetic_air_off_recovery_and_invariance():
 
     # Exact / within 1% scale invariance in kappa
     loss_k1 = synth_loss_rho(recovered_rho)
-    sols_k3 = sim.solve_sequence(depths, tool_x_mm=tx, kappa=3.0, rho=recovered_rho, air_on=False, gtol=1e-4)
+    sols_k3 = sim.solve_sequence(depths, tool_x_mm=tx, kappa=3.0, rho=recovered_rho, air_on=False)
     loss_k3 = sum(
         np.sum(huber_loss((sim.extract_profile(s, stations_mm=stations, mode="top_vertex") - w)[mask]))
         for s, w in zip(sols_k3, synth_obs)
@@ -82,7 +82,7 @@ def test_synthetic_air_on_recovery():
 
     def synth_loss_kappa(log_k: float) -> float:
         k = float(np.exp(log_k))
-        sols = sim.solve_sequence(depths, tool_x_mm=tx, kappa=k, rho=true_rho, air_on=True, gtol=1e-4)
+        sols = sim.solve_sequence(depths, tool_x_mm=tx, kappa=k, rho=true_rho, air_on=True)
         return sum(
             np.sum(huber_loss((sim.extract_profile(s, stations_mm=stations, mode="top_vertex") - w)[mask]))
             for s, w in zip(sols, synth_obs)
@@ -113,9 +113,11 @@ def test_stage1_and_stage2_losses_below_50_percent_of_b0():
 
 
 def test_fit_params_and_plots_written():
-    """Verify all required fitting deliverables exist."""
+    """Verify all required fitting deliverables, solver block, and interval consistency exist."""
     fit_dir = Path("out/fit")
     assert (fit_dir / "params.json").exists()
+    assert (fit_dir / "loss_vs_rho.csv").stat().st_size > 100
+    assert (fit_dir / "loss_vs_kappa.csv").stat().st_size > 100
     assert (fit_dir / "loss_vs_rho.png").stat().st_size > 1000
     assert (fit_dir / "loss_vs_kappa.png").stat().st_size > 1000
     assert (fit_dir / "depth_fingerprint.png").stat().st_size > 1000
@@ -123,6 +125,24 @@ def test_fit_params_and_plots_written():
 
     with open(fit_dir / "params.json") as f:
         data = json.load(f)
-    for key in ["rho_hat", "kappa_hat", "loss_stage1", "loss_stage2", "kappa_ci_68", "kappa_ci_95", "peak_force_N", "peak_overpressure_kPa"]:
+    for key in [
+        "solver",
+        "rho_identified",
+        "rho_used",
+        "rho_hat",
+        "kappa_hat",
+        "loss_stage1",
+        "loss_stage2",
+        "kappa_ci_68",
+        "kappa_ci_95",
+        "peak_force_N",
+        "peak_overpressure_kPa",
+    ]:
         assert key in data, f"Key {key} missing from params.json"
+    assert data["solver"]["gtol"] == 1e-6
+    assert data["solver"]["converged"] is True
+    assert data["solver"]["contact"] == "held"
+    ci_68 = data["kappa_ci_68"]
+    ci_95 = data["kappa_ci_95"]
+    assert ci_95[0] <= ci_68[0] and ci_95[1] >= ci_68[1]
 

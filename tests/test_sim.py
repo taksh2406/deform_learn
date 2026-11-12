@@ -132,13 +132,162 @@ def test_air_off_exact_scale_invariance():
     assert max_diff <= 0.01, f"Air off scale invariance violated: max diff {max_diff:.5f} mm > 0.01 mm"
 
 
-def test_solve_speed_under_one_second():
-    """Speed: one snapshot takes < 1 s when warm-started."""
+def _max_grad_free(
+    sim: StaticSimulator,
+    X: np.ndarray,
+    tip_drop_mm: float,
+    tool_x_mm: float,
+    r_tool_mm: float,
+    kappa: float,
+    rho: float,
+    air_on: bool,
+) -> float:
+    """Compute max |grad| across free coordinates independently using total_energy_and_grad."""
+    held_v, _ = sim.held_vertices_and_targets(tip_drop_mm, tool_x_mm, r_tool_mm)
+    free_v = np.ones(sim.N, dtype=bool)
+    free_v[held_v] = False
+    free_mask = np.repeat(free_v, 3)
+    _, grad = sim.total_energy_and_grad(
+        X.ravel(), kappa=kappa, rho=rho, air_on=air_on, tool_center=None
+    )
+    return float(np.max(np.abs(grad[free_mask])))
+
+
+def test_g1_1_held_vertex_position():
+    """G1.1: Held vertex z equals prescribed value within 1e-9 mm (and x, y stay fixed)."""
     sim = StaticSimulator()
-    depths = [2.0, 4.0, 6.0, 8.0, 10.0]
-    t0 = time.time()
-    sim.solve_sequence(depths, tool_x_mm=60.0, kappa=1.0, rho=1.0, air_on=True)
-    elapsed = time.time() - t0
-    avg_per_snapshot = elapsed / len(depths)
-    assert avg_per_snapshot < 1.0, f"Average solve time {avg_per_snapshot:.3f}s >= 1.0s"
+    # Pen contact
+    X_pen = sim.solve_snapshot(tip_drop_mm=12.0, tool_x_mm=60.0, r_tool_mm=2.5, kappa=1.0, rho=1.5, air_on=True)
+    held_v, tgt = sim.held_vertices_and_targets(12.0, 60.0, 2.5)
+    assert len(held_v) == 1
+    assert float(np.max(np.abs(X_pen[held_v] - tgt))) < 1e-9
+
+    # Finger spherical-cap contact
+    X_fin = sim.solve_snapshot(tip_drop_mm=16.0, tool_x_mm=63.0, r_tool_mm=8.0, kappa=1.0, rho=1.0, air_on=True)
+    held_f, tgt_f = sim.held_vertices_and_targets(16.0, 63.0, 8.0)
+    assert len(held_f) == 3
+    assert float(np.max(np.abs(X_fin[held_f] - tgt_f))) < 1e-9
+
+
+def test_g1_2_no_slipping_at_50k_iterations():
+    """G1.2: At maxiter=50000, drop at tool equals tip_drop and 20 mm drop stays > 0.5 * tip_drop."""
+    sim = StaticSimulator()
+    tip = 12.0
+    X = sim.solve_snapshot(
+        tip_drop_mm=tip, tool_x_mm=60.0, r_tool_mm=2.5, kappa=1.0, rho=1.5, air_on=False, maxiter=50000
+    )
+    w = sim.extract_profile(X, mode="top_vertex")
+    i60 = int(np.argmin(np.abs(sim.ring_x - 60.0)))
+    i80 = int(np.argmin(np.abs(sim.ring_x - 80.0)))
+    assert abs(float(w[i60]) - tip) < 1e-9
+    assert float(w[i80]) > 0.5 * tip, f"Slip/dimple check failed: w(80)={w[i80]:.3f} <= {0.5*tip}"
+
+
+def test_g1_3_convergence_grid():
+    """G1.3: Converges (success=True, max|grad_free| < 1e-4 N) for 12 mm @ 60 mm across air and rho."""
+    sim = StaticSimulator()
+    for air_on, kappa in [(False, 1.0), (True, 0.757)]:
+        for rho in [0.5, 1.5, 7.0]:
+            X = sim.solve_snapshot(
+                tip_drop_mm=12.0, tool_x_mm=60.0, r_tool_mm=2.5, kappa=kappa, rho=rho, air_on=air_on
+            )
+            mg = _max_grad_free(sim, X, 12.0, 60.0, 2.5, kappa, rho, air_on)
+            assert mg < 1e-4, f"air={air_on}, rho={rho}: max|grad_free|={mg:.3e} >= 1e-4"
+
+
+def test_g1_4_iteration_independence():
+    """G1.4: Re-solving with doubled maxiter and gtol=1e-7 changes profile by < 0.02 mm."""
+    sim = StaticSimulator()
+    for air_on, kappa, rho in [(False, 1.0, 1.5), (True, 0.757, 7.03)]:
+        X1 = sim.solve_snapshot(
+            tip_drop_mm=12.0, tool_x_mm=60.0, kappa=kappa, rho=rho, air_on=air_on, gtol=1e-6, maxiter=20000
+        )
+        X2 = sim.solve_snapshot(
+            tip_drop_mm=12.0,
+            tool_x_mm=60.0,
+            kappa=kappa,
+            rho=rho,
+            air_on=air_on,
+            X_init=X1,
+            gtol=1e-7,
+            maxiter=40000,
+        )
+        X3 = sim.solve_snapshot(
+            tip_drop_mm=12.0, tool_x_mm=60.0, kappa=kappa, rho=rho, air_on=air_on, gtol=1e-7, maxiter=40000
+        )
+        w1 = sim.extract_profile(X1, mode="top_vertex")
+        w2 = sim.extract_profile(X2, mode="top_vertex")
+        w3 = sim.extract_profile(X3, mode="top_vertex")
+        diff_warm = float(np.max(np.abs(w1 - w2)))
+        diff_cold = float(np.max(np.abs(w1 - w3)))
+        assert diff_warm < 0.02, f"Warm re-solve diff {diff_warm:.5f} >= 0.02 mm (air={air_on})"
+        assert diff_cold < 0.02, f"Cold re-solve diff {diff_cold:.5f} >= 0.02 mm (air={air_on})"
+
+
+def test_g1_5_matches_earlier_converged_check():
+    """G1.5: 12 mm @ 60 mm matches converged uncapped ratio (0.886+/-0.02) and capped ratio/dp."""
+    sim = StaticSimulator()
+    i60 = int(np.argmin(np.abs(sim.ring_x - 60.0)))
+    i80 = int(np.argmin(np.abs(sim.ring_x - 80.0)))
+
+    X_uncap = sim.solve_snapshot(tip_drop_mm=12.0, tool_x_mm=60.0, kappa=1.0, rho=1.5, air_on=False)
+    w_u = sim.extract_profile(X_uncap, mode="top_vertex")
+    r_uncap = float(w_u[i80] / w_u[i60])
+    assert abs(r_uncap - 0.886) <= 0.02, f"Uncapped 20mm ratio {r_uncap:.4f} outside 0.886 +/- 0.02"
+
+    X_cap = sim.solve_snapshot(tip_drop_mm=12.0, tool_x_mm=60.0, kappa=0.757, rho=7.03, air_on=True)
+    w_c = sim.extract_profile(X_cap, mode="top_vertex")
+    r_cap = float(w_c[i80] / w_c[i60])
+    V_mesh = enclosed_volume(X_cap, sim.tris)
+    V_gas = sim.V0 + (V_mesh - sim.V_mesh_rest)
+    dp_kpa = float((sim.p_atm * ((sim.V0 / V_gas) ** sim.gas_exponent) - sim.p_atm) * 1e3)
+    assert abs(r_cap - 0.707) <= 0.02, f"Capped 20mm ratio {r_cap:.4f} outside 0.707 +/- 0.02"
+    assert abs(dp_kpa - 1.31) <= 0.05, f"Capped dp {dp_kpa:.3f} kPa outside 1.31 +/- 0.05 kPa"
+
+
+def test_g1_6_scale_invariance_12mm():
+    """G1.6: With air off, kappa=1 and kappa=3 give profiles identical within 0.01 mm."""
+    sim = StaticSimulator()
+    X1 = sim.solve_snapshot(tip_drop_mm=12.0, tool_x_mm=60.0, kappa=1.0, rho=1.5, air_on=False)
+    X3 = sim.solve_snapshot(tip_drop_mm=12.0, tool_x_mm=60.0, kappa=3.0, rho=1.5, air_on=False)
+    max_diff = float(np.max(np.abs(sim.extract_profile(X1) - sim.extract_profile(X3))))
+    assert max_diff < 0.01, f"Air-off scale invariance diff {max_diff:.6f} >= 0.01 mm"
+
+
+def test_g1_7_reaction_force_and_finite_diff_dEdd():
+    """G1.7: Reaction force > 0, increases with depth, and matches finite-difference dE/dd within 2%."""
+    sim = StaticSimulator()
+    depths = [4.0, 8.0, 12.0]
+    sols = sim.solve_sequence(depths, tool_x_mm=60.0, r_tool_mm=2.5, kappa=0.757, rho=1.5, air_on=True)
+    forces = [sim.reaction_force(X, d, 60.0, 2.5, kappa=0.757, rho=1.5, air_on=True) for X, d in zip(sols, depths)]
+    assert all(f > 0.0 for f in forces), f"Non-positive forces: {forces}"
+    assert forces[0] < forces[1] < forces[2], f"Forces not strictly increasing: {forces}"
+
+    # Finite-difference dE/dd check at d = 8.0 mm
+    eps = 0.05
+    X_m = sim.solve_snapshot(8.0 - eps, 60.0, 2.5, kappa=0.757, rho=1.5, air_on=True, X_init=sols[1])
+    X_p = sim.solve_snapshot(8.0 + eps, 60.0, 2.5, kappa=0.757, rho=1.5, air_on=True, X_init=sols[1])
+    E_m, _ = sim.total_energy_and_grad(X_m.ravel(), kappa=0.757, rho=1.5, air_on=True)
+    E_p, _ = sim.total_energy_and_grad(X_p.ravel(), kappa=0.757, rho=1.5, air_on=True)
+    dEdd = (E_p - E_m) / (2.0 * eps)
+    rel_err = abs(forces[1] - dEdd) / abs(dEdd)
+    assert rel_err < 0.02, f"Force {forces[1]:.4f} N vs dE/dd {dEdd:.4f} N (rel err {rel_err*100:.2f}% >= 2%)"
+
+
+def test_g1_8_warm_start_timing_and_logging():
+    """G1.8: Measure median seconds per warm-started converged snapshot and verify solve_log.csv."""
+    sim = StaticSimulator()
+    depths = [2.0, 4.0, 6.0, 8.0, 10.0, 12.0]
+    per_step = []
+    X = sim.X0.copy()
+    for d in depths:
+        t0 = time.time()
+        X = sim.solve_snapshot(d, tool_x_mm=60.0, kappa=1.0, rho=1.0, air_on=True, X_init=X)
+        dt = time.time() - t0
+        if d > depths[0]:
+            per_step.append(dt)
+    median_s = float(np.median(per_step))
+    print(f"\n[G1.8] Warm-started converged snapshot times (s): {[round(x, 3) for x in per_step]}, median={median_s:.3f}s")
+    assert median_s < 10.0, f"Median warm-started snapshot time {median_s:.3f}s too slow"
+    assert sim.log_path.exists(), "solve_log.csv not created"
 

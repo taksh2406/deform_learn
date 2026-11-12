@@ -88,8 +88,10 @@ def test_master_all_video_exists_and_counts():
     info_all = get_video_info(demo_dir / "all.mp4")
     assert info_all["width"] == 1920
     assert info_all["height"] == 720
-    # Master video contains 5 title cards (~14.5s = ~435 frames) + fresh (478) + cap (279) > 1000 frames
-    assert info_all["n_frames"] >= 1000, f"Expected >= 1000 frames for all.mp4, got {info_all['n_frames']}"
+    # Master video contains 6 title cards (~17.5s) + fresh (478) + cap (279) + sim (300) ~ 1580 frames (< 2500)
+    assert 1000 <= info_all["n_frames"] <= 2500, (
+        f"Expected 1000..2500 frames for all.mp4, got {info_all['n_frames']}"
+    )
 
 
 @pytest.mark.parametrize("clip_id,rest_frame_idx", [
