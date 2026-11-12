@@ -226,4 +226,4 @@ Measured with converged equilibrium solves (`gtol=1e-6`, `maxiter=20000`, `OMP_N
 - **NumPy:** Vectorized tensor geometry, spring potential formulations, and array transformations.
 - **Matplotlib:** Multi-panel visualization layouts, diagnostic plots, and dashboard graphics.
 - **Google Antigravity:** Agentic development framework and execution environment.
-- **Claude (Anthropic):** Planning assistance (primarily in helping me decide video shooting environment)
+- **Claude (Anthropic):** Planning assistance (helping me decide video shooting environment, brainstorming, deciding tech stack, verification)
