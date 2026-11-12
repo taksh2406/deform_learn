@@ -186,3 +186,7 @@ Hard stop: 13:00 IST
 - `python src/simulate.py --press-at 60 --depth 12`: exited `0` (`peak_force_N=5.79`, `peak_overpressure_kPa=1.445`, `delta_V_mm3=10064.4`).
 - `python -m pytest tests/test_setup.py tests/test_mesh.py tests/test_sim.py -v`: `22 passed in 119.79s (0:01:59)`.
 - `python -m pytest tests/test_simulate.py tests/test_demo.py -k "not test_matches_evaluation_pipeline and not test_rest_frame_predicted_edge_accuracy" -v`: `8 passed, 1 failed, 5 deselected in 504.94s (0:08:24)` (`6/6` standalone `test_simulate.py` tests passed; `test_cap_effect_video_exists_and_counts` and `test_master_all_video_exists_and_counts` passed; `test_fresh_instance_videos_exist_and_counts` failed as expected in a clean clone because intermediate `out/demo/fresh_instance_161747.mp4` is gitignored; `57/57` passed on the full-pipeline tree). Removed `/tmp/fresh_clone` afterward.
+
+### Phase 7.4 & 7.6 Status
+- **Repo visibility (7.6):** `curl -sI https://github.com/taksh2406/deform_learn` returned `HTTP/2 200` with `logged_in=no` (publicly accessible).
+- **Demo video (`out/demo/all.mp4`, 7.4):** `11,642,731` bytes (`52.79 s`, `1582` frames) verified and committed on `converged-fix`. `README.md` retains `[DEMO VIDEO LINK]` per user confirmation so the user can upload `out/demo/all.mp4` as a GitHub asset directly into `README.md` on GitHub after `main` + `v2-converged` are pushed.
