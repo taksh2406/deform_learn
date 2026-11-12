@@ -1,6 +1,8 @@
 # Learning a capped PET bottle's deformation from phone video
 
-[DEMO VIDEO LINK]
+
+https://github.com/user-attachments/assets/842844d1-5818-4971-8640-216d3f1d3d78
+
 
 An empty, capped 1 L Bisleri bottle lies on a hard floor. I pressed it with a pen and with a fingertip, filmed from the side with a phone at 30 fps. I fit an effective shell-plus-air model to the observed deformation of the bottle's top edge, then predicted held-out presses using only the tracked tool trajectory as input.
 
