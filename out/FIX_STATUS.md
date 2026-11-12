@@ -178,3 +178,11 @@ Hard stop: 13:00 IST
 | **7.2** | Clean-checkout verification (local copy of the `42` tracked + `.gitignore` + `out/FIX_STATUS.md` files, zero `out/tracks`/`out/eval` intermediates) | `setup_repo.py --check` (13/13 OK), `simulate.py --press-at 60 --depth 12` completed cleanly, `pytest tests/test_setup.py tests/test_mesh.py` `8 passed in 1.94s` *(note: full `git clone` over/via `.git` + full pipeline/remote checks wait on user git permission)* | **PASS (local clean-tree)** |
 | **7.3** | Full inspection of `out/demo/all.mp4` cards & segments | Fixed `67 min` timescale bug; `52.79 s / 1582 frames / 11.10 MB` matches README | **PASS** |
 | **7.4–7.7** | Video upload/link check, `git merge converged-fix`, `git tag v2-converged`, `git push --tags`, incognito public check | Requires network / GitHub permissions (`BypassSandbox: true`); gated on user approval | **PENDING APPROVAL** |
+
+
+### Phase 7.2 True Git-Clone Verification (`converged-fix` commit `4efab90`)
+- `git clone /home/taksh/deform_learn -b converged-fix /tmp/fresh_clone` succeeded cleanly.
+- `python src/setup_repo.py --check`: passed (`13/13` clips `OK`).
+- `python src/simulate.py --press-at 60 --depth 12`: exited `0` (`peak_force_N=5.79`, `peak_overpressure_kPa=1.445`, `delta_V_mm3=10064.4`).
+- `python -m pytest tests/test_setup.py tests/test_mesh.py tests/test_sim.py -v`: `22 passed in 119.79s (0:01:59)`.
+- `python -m pytest tests/test_simulate.py tests/test_demo.py -k "not test_matches_evaluation_pipeline and not test_rest_frame_predicted_edge_accuracy" -v`: `8 passed, 1 failed, 5 deselected in 504.94s (0:08:24)` (`6/6` standalone `test_simulate.py` tests passed; `test_cap_effect_video_exists_and_counts` and `test_master_all_video_exists_and_counts` passed; `test_fresh_instance_videos_exist_and_counts` failed as expected in a clean clone because intermediate `out/demo/fresh_instance_161747.mp4` is gitignored; `57/57` passed on the full-pipeline tree). Removed `/tmp/fresh_clone` afterward.
