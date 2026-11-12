@@ -12,6 +12,7 @@ Usage:
 """
 
 import argparse
+from concurrent.futures import ProcessPoolExecutor
 import csv
 import json
 import os
@@ -81,19 +82,25 @@ def compute_tool_force(
     R: float,
     kappa: float,
     air_on: bool,
+    sim: Optional[StaticSimulator] = None,
+    rho: float = 1.0,
+    gas_exponent: float = 1.4,
 ) -> float:
-    """Compute vertical contact force F_z exerted by indenter tool on bottle shell."""
-    if depth <= 0.05:
+    """Compute upward vertical reaction force F_z exerted by the bottle shell on the held indenter."""
+    if depth <= 0.0:
         return 0.0
-    c_tool = np.array([float(press_at), 0.0, 2.0 * R - float(depth) + r_eff])
-    d_vec = sol - c_tool[None, :]
-    d_val = np.linalg.norm(d_vec, axis=1)
-    mask = d_val < r_eff
-    if not np.any(mask):
-        return 0.0
-    k_pen = 20.0 * kappa if not air_on else max(10.0, 20.0 * kappa)
-    F_z = float(np.sum(k_pen * (r_eff - d_val[mask]) * (c_tool[2] - sol[mask, 2]) / d_val[mask]))
-    return max(0.0, F_z)
+    sim_obj = StaticSimulator() if sim is None else sim
+    F_z = sim_obj.reaction_force(
+        sol,
+        tip_drop_mm=float(depth),
+        tool_x_mm=float(press_at),
+        r_tool_mm=float(r_eff),
+        kappa=float(kappa),
+        rho=float(rho),
+        air_on=bool(air_on),
+        n_gas=float(gas_exponent),
+    )
+    return max(0.0, float(F_z))
 
 
 def simulate_sequence(
@@ -105,11 +112,10 @@ def simulate_sequence(
     rho: float,
     air_on: bool,
     gas_exponent: float,
-    gtol: float = 1e-4,
-    maxiter: int = 120,
+    gtol: float = 1e-6,
+    maxiter: int = 20000,
 ) -> Dict[str, Any]:
     """Solve static equilibrium sequentially along a sequence of indentation depths."""
-    r_eff = max(float(tool_radius), 3.75)
     sols = []
     forces = []
     overpressures = []
@@ -120,16 +126,15 @@ def simulate_sequence(
 
     # Loading phase: use sim.solve_sequence for exact consistency with evaluate.py
     loading_depths = depths_arr[:k_pk + 1]
-    nonzero_mask = loading_depths > 0.05
+    nonzero_mask = loading_depths > 0.0
     if np.any(nonzero_mask):
         first_nonzero = int(np.where(nonzero_mask)[0][0])
         nz_depths = loading_depths[first_nonzero:]
-        eff_kappa = 1.0 if not air_on else float(kappa)
         nz_sols = sim.solve_sequence(
             nz_depths,
             tool_x_mm=press_at,
             r_tool_mm=tool_radius,
-            kappa=eff_kappa,
+            kappa=float(kappa),
             rho=rho,
             air_on=air_on,
             n_gas=gas_exponent,
@@ -145,14 +150,14 @@ def simulate_sequence(
     x_curr = load_sols[-1] if len(load_sols) > 0 else sim.X0.copy()
     unloading_depths = depths_arr[k_pk + 1:]
     for d in unloading_depths:
-        if d <= 0.05:
+        if d <= 0.0:
             sol = sim.X0.copy()
         else:
             sol = sim.solve_snapshot(
-                tip_drop_mm=d,
+                tip_drop_mm=float(d),
                 tool_x_mm=press_at,
                 r_tool_mm=tool_radius,
-                kappa=kappa,
+                kappa=float(kappa),
                 rho=rho,
                 air_on=air_on,
                 n_gas=gas_exponent,
@@ -166,12 +171,23 @@ def simulate_sequence(
     all_sols = load_sols + unload_sols
 
     for d, sol in zip(depths, all_sols):
-        if d <= 0.05:
+        if d <= 0.0:
             F_z = 0.0
             dp = 0.0
             dV = 0.0
         else:
-            F_z = compute_tool_force(sol, press_at, d, r_eff, sim.R, kappa, air_on)
+            F_z = compute_tool_force(
+                sol,
+                press_at,
+                float(d),
+                tool_radius,
+                sim.R,
+                kappa,
+                air_on,
+                sim=sim,
+                rho=rho,
+                gas_exponent=gas_exponent,
+            )
             V_mesh = enclosed_volume(sol, sim.tris)
             dV = float(sim.V_mesh_rest - V_mesh)
             if air_on:
@@ -544,7 +560,8 @@ def run_interactive(
             rho=rho,
             air_on=cap_val,
             X_init=sol_state[0],
-            maxiter=100,
+            gtol=1e-6,
+            maxiter=20000,
         )
         redraw(x_val, d_val, cap_val)
 
@@ -553,6 +570,24 @@ def run_interactive(
     check_cap.on_clicked(update)
 
     plt.show()
+
+
+def _compare_cap_worker(args: Tuple[Any, ...]) -> Dict[str, Any]:
+    """Worker solving one cap state (on or off) for --compare-cap."""
+    p_atm, V0, gas_exponent, depths, press_at, tool_radius, kappa, rho, air_on, gtol, maxiter = args
+    sim_local = StaticSimulator(p_atm=p_atm, V0=V0, gas_exponent=gas_exponent)
+    return simulate_sequence(
+        sim_local,
+        depths,
+        press_at,
+        tool_radius,
+        kappa,
+        rho,
+        air_on=air_on,
+        gas_exponent=gas_exponent,
+        gtol=gtol,
+        maxiter=maxiter,
+    )
 
 
 def run_standalone_simulation(
@@ -576,7 +611,7 @@ def run_standalone_simulation(
     gas_exponent = float(cfg.get("gas_exponent", 1.4))
 
     kappa_hat = float(params["kappa_hat"])
-    rho_hat = float(params["rho_hat"])
+    rho_hat = float(params.get("rho_used", params["rho_hat"]))
 
     # Establish output directory
     if out_dir is None:
@@ -613,19 +648,19 @@ def run_standalone_simulation(
     # Initialize simulator
     sim = StaticSimulator(p_atm=p_atm, V0=V0, gas_exponent=gas_exponent)
 
-    # Optimization tolerances
-    if trajectory_file is not None:
-        gtol = 1e-4
-        maxiter = 120
-    else:
-        gtol = 1e-5
-        maxiter = 150
+    # Optimization tolerances (held-contact equilibrium)
+    gtol = 1e-6
+    maxiter = 20000
 
     # Execute simulation
     if compare_cap:
         print(f"Simulating Cap ON and Cap OFF comparison (press_at={press_at:.1f} mm, peak depth={peak_depth:.1f} mm, steps={steps})...")
-        res_on = simulate_sequence(sim, depths, press_at, tool_radius, kappa_hat, rho_hat, air_on=True, gas_exponent=gas_exponent, gtol=gtol, maxiter=maxiter)
-        res_off = simulate_sequence(sim, depths, press_at, tool_radius, kappa_hat, rho_hat, air_on=False, gas_exponent=gas_exponent, gtol=gtol, maxiter=maxiter)
+        tasks = [
+            (p_atm, V0, gas_exponent, depths, press_at, tool_radius, kappa_hat, rho_hat, True, gtol, maxiter),
+            (p_atm, V0, gas_exponent, depths, press_at, tool_radius, kappa_hat, rho_hat, False, gtol, maxiter),
+        ]
+        with ProcessPoolExecutor(max_workers=2) as ex:
+            res_on, res_off = list(ex.map(_compare_cap_worker, tasks))
     else:
         air_on = (cap.lower() == "on")
         print(f"Simulating Cap {cap.upper()} (press_at={press_at:.1f} mm, peak depth={peak_depth:.1f} mm, steps={steps})...")
@@ -738,7 +773,7 @@ def main() -> None:
         run_interactive(
             sim,
             kappa=float(params["kappa_hat"]),
-            rho=float(params["rho_hat"]),
+            rho=float(params.get("rho_used", params["rho_hat"])),
             gas_exponent=float(cfg.get("gas_exponent", 1.4)),
             tool_radius=tool_radius,
         )

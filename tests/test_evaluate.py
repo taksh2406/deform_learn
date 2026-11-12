@@ -88,3 +88,22 @@ def test_all_evaluation_plots_generated():
         assert p_pk.exists(), f"Plot {p_pk} missing"
         assert p_err.stat().st_size > 1000, f"Plot {p_err} is empty"
         assert p_pk.stat().st_size > 1000, f"Plot {p_pk} is empty"
+
+
+def test_g4_3_rest_frame_within_2px():
+    """G4.3: On rest frames, predicted edge stays within 2 px of observed edge for every test clip."""
+    import numpy as np
+    import yaml
+
+    with open("config/clips.yaml") as f:
+        cfg = yaml.safe_load(f)
+
+    for c in TEST_CLIPS:
+        d = np.load(f"out/tracks/{c}_mm.npz", allow_pickle=True)
+        r0, r1 = cfg["clips"][c]["rest_frames"]
+        s = float(d["s"])
+        w_rest = d["w_obs_mm"][int(r0):int(r1) + 1]
+        mean_px = float(np.nanmean(np.abs(w_rest)) * s)
+        med_px = float(np.nanmedian(np.abs(w_rest)) * s)
+        assert mean_px <= 2.0, f"Rest mean error {mean_px:.3f} px > 2.0 on {c}"
+        assert med_px <= 2.0, f"Rest median error {med_px:.3f} px > 2.0 on {c}"

@@ -16,6 +16,8 @@ Produces the required demonstration videos and concatenates them with title card
 """
 
 import argparse
+from concurrent.futures import ProcessPoolExecutor
+import csv
 import json
 import os
 from pathlib import Path
@@ -66,20 +68,36 @@ def precompute_simulation_grid(
 ) -> Tuple[np.ndarray, List[np.ndarray], np.ndarray]:
     """Solve static equilibrium on an increasing depth grid warm-started sequentially."""
     grid_d = np.linspace(0.0, max(0.5, float(max_d_mm)), n_pts)
-    eff_kappa = float(kappa) if air_on else 1.0
     sols = sim.solve_sequence(
         grid_d,
         tool_x_mm=float(tool_x_mm),
-        kappa=eff_kappa,
+        kappa=float(kappa),
         rho=float(rho),
         air_on=air_on,
         r_tool_mm=float(r_tool_mm),
-        gtol=1e-4,
-        maxiter=120,
+        gtol=1e-6,
+        maxiter=20000,
     )
     # Extract top profile on ring_x for each solution
     profs = np.array([sim.extract_profile(s, stations_mm=sim.ring_x, mode="top_vertex") for s in sols])
     return grid_d, sols, profs
+
+
+def _demo_precompute_worker(args: Tuple[Any, ...]) -> Tuple[str, Tuple[np.ndarray, List[np.ndarray], np.ndarray]]:
+    """Worker to precompute converged simulation grids in parallel for demo clips."""
+    key, p_atm, V0, gas_exponent, max_d_mm, tool_x_mm, kappa, rho, air_on, r_tool_mm, n_pts = args
+    sim_local = StaticSimulator(p_atm=p_atm, V0=V0, gas_exponent=gas_exponent)
+    res = precompute_simulation_grid(
+        sim_local,
+        max_d_mm=max_d_mm,
+        tool_x_mm=tool_x_mm,
+        kappa=kappa,
+        rho=rho,
+        air_on=air_on,
+        r_tool_mm=r_tool_mm,
+        n_pts=n_pts,
+    )
+    return key, res
 
 
 def interpolate_state(
@@ -225,6 +243,7 @@ def render_fresh_instance_clip(
     cfg: Dict[str, Any],
     tracks_dir: Path = Path("out/tracks"),
     fps: float = 29.97,
+    precomputed: Optional[Tuple[np.ndarray, List[np.ndarray], np.ndarray]] = None,
 ) -> Path:
     """Render 3-panel demonstration video for a single fresh instance test clip."""
     print(f"Rendering Fresh Instance Demo for Clip {clip_id}...")
@@ -260,16 +279,19 @@ def render_fresh_instance_clip(
     t_peak = int(c_start + np.nanargmax(tip_drop_mm[c_start : c_end + 1])) if len(c_idx) > 0 else n_frames // 2
 
     max_d = float(np.nanmax(tip_drop_mm[c_idx])) if len(c_idx) > 0 else 5.0
-    grid_d, sols, profs = precompute_simulation_grid(
-        sim,
-        max_d_mm=max_d,
-        tool_x_mm=tool_x_med_mm,
-        kappa=kappa,
-        rho=rho,
-        air_on=is_cap,
-        r_tool_mm=r_tool,
-        n_pts=25,
-    )
+    if precomputed is not None:
+        grid_d, sols, profs = precomputed
+    else:
+        grid_d, sols, profs = precompute_simulation_grid(
+            sim,
+            max_d_mm=max_d,
+            tool_x_mm=tool_x_med_mm,
+            kappa=kappa,
+            rho=rho,
+            air_on=is_cap,
+            r_tool_mm=r_tool,
+            n_pts=25,
+        )
 
     # Precalculate station coordinates in pixels
     st_px = np.round(x_base_px - stations_mm * s).astype(np.int32)
@@ -420,8 +442,8 @@ def render_fresh_instance_clip(
             linewidth=0.15,
         )
 
-        # Plot tool contact location
-        c_tool = [tool_x_med_mm, 0.0, 2.0 * sim.R - d_val + r_tool]
+        # Plot held tool tip contact location
+        c_tool = [tool_x_med_mm, 0.0, 2.0 * sim.R - d_val]
         ax3d.scatter([c_tool[0]], [c_tool[1]], [c_tool[2]], color="#facc15", s=80, edgecolors="white", lw=1.5)
 
         ax3d.set_box_aspect([220, 70, 70])
@@ -498,6 +520,8 @@ def render_cap_effect(
     cfg: Dict[str, Any],
     tracks_dir: Path = Path("out/tracks"),
     fps: float = 29.97,
+    precomputed_cap: Optional[Tuple[np.ndarray, List[np.ndarray], np.ndarray]] = None,
+    precomputed_uncap: Optional[Tuple[np.ndarray, List[np.ndarray], np.ndarray]] = None,
 ) -> Path:
     """Render demonstration video comparing 001531 (capped) and 001656 (uncapped)."""
     print("Rendering Cap Effect Demo (001531 vs 001656)...")
@@ -529,29 +553,38 @@ def render_cap_effect(
     dx_cap = st_cap - tx_cap
     dx_uncap = st_uncap - tx_uncap
 
-    # Peak model solve
-    sol_pk_cap = sim.solve_snapshot(pk_d_cap, tool_x_mm=tx_cap, kappa=kappa, rho=rho, air_on=True, r_tool_mm=2.5)
-    w_model_cap_pk = sim.extract_profile(sol_pk_cap, stations_mm=st_cap, mode="top_vertex")
+    # Pre-solve sequence for both clips to overlay model predictions
+    if precomputed_cap is not None:
+        grid_d_cap, sols_cap, profs_cap = precomputed_cap
+    else:
+        grid_d_cap, sols_cap, profs_cap = precompute_simulation_grid(
+            sim, pk_d_cap, tx_cap, kappa=kappa, rho=rho, air_on=True, r_tool_mm=2.5, n_pts=20
+        )
+    if precomputed_uncap is not None:
+        grid_d_uncap, sols_uncap, profs_uncap = precomputed_uncap
+    else:
+        grid_d_uncap, sols_uncap, profs_uncap = precompute_simulation_grid(
+            sim, pk_d_uncap, tx_uncap, kappa=kappa, rho=rho, air_on=False, r_tool_mm=2.5, n_pts=20
+        )
+
+    # Peak model profile directly from last grid point (grid_d[-1] == pk_d)
+    w_model_cap_pk = np.interp(st_cap, sim.ring_x, profs_cap[-1])
     norm_model_cap = w_model_cap_pk / pk_d_cap
 
-    sol_pk_uncap = sim.solve_snapshot(pk_d_uncap, tool_x_mm=tx_uncap, kappa=1.0, rho=rho, air_on=False, r_tool_mm=2.5)
-    w_model_uncap_pk = sim.extract_profile(sol_pk_uncap, stations_mm=st_uncap, mode="top_vertex")
+    w_model_uncap_pk = np.interp(st_uncap, sim.ring_x, profs_uncap[-1])
     norm_model_uncap = w_model_uncap_pk / pk_d_uncap
 
     # Peak data
-    k_pk_cap = np.argmax(tr_mm_cap["d_mm"])
+    k_pk_cap = int(np.argmax(tr_mm_cap["d_mm"]))
     norm_data_cap = tr_mm_cap["u_mm"][k_pk_cap] / pk_d_cap
 
-    k_pk_uncap = np.argmax(tr_mm_uncap["d_mm"])
+    k_pk_uncap = int(np.argmax(tr_mm_uncap["d_mm"]))
     norm_data_uncap = tr_mm_uncap["u_mm"][k_pk_uncap] / pk_d_uncap
 
-    # Pre-solve sequence for both clips to overlay model predictions
-    grid_d_cap, sols_cap, profs_cap = precompute_simulation_grid(
-        sim, pk_d_cap, tx_cap, kappa=kappa, rho=rho, air_on=True, r_tool_mm=2.5, n_pts=20
-    )
-    grid_d_uncap, sols_uncap, profs_uncap = precompute_simulation_grid(
-        sim, pk_d_uncap, tx_uncap, kappa=1.0, rho=rho, air_on=False, r_tool_mm=2.5, n_pts=20
-    )
+    m15_cap = (np.abs(dx_cap) >= 15.0) & (np.abs(dx_cap) <= 21.0)
+    m15_uncap = (np.abs(dx_uncap) >= 15.0) & (np.abs(dx_uncap) <= 21.0)
+    r15_cap_data = float(np.mean(norm_data_cap[m15_cap]))
+    r15_uncap_data = float(np.mean(norm_data_uncap[m15_uncap]))
 
     cap_vid1 = cv2.VideoCapture(str(Path("data/raw") / c_cap["file"]))
     cap_vid2 = cv2.VideoCapture(str(Path("data/raw") / c_uncap["file"]))
@@ -568,18 +601,18 @@ def render_cap_effect(
 
     # Capped curves (Blue)
     ax_bot.plot(dx_cap, norm_data_cap, "o-", color="#38bdf8", lw=2.2, ms=6, label="Capped Data (001531)")
-    ax_bot.plot(dx_cap, norm_model_cap, "--", color="#0284c7", lw=2.5, label="Capped Model (\\kappa=0.76, Air On)")
+    ax_bot.plot(dx_cap, norm_model_cap, "--", color="#0284c7", lw=2.5, label=f"Capped Model ($\\kappa$={kappa:.2f}, Air On)")
 
     # Uncapped curves (Orange)
     ax_bot.plot(dx_uncap, norm_data_uncap, "s-", color="#fb923c", lw=2.2, ms=6, label="Uncapped Data (001656)")
-    ax_bot.plot(dx_uncap, norm_model_uncap, "--", color="#ea580c", lw=2.5, label="Uncapped Model (\\kappa=1.00, Air Off)")
+    ax_bot.plot(dx_uncap, norm_model_uncap, "--", color="#ea580c", lw=2.5, label=f"Uncapped Model ($\\kappa$={kappa:.2f}, Air Off)")
 
     ax_bot.set_xlim(-60, 60)
     ax_bot.set_ylim(-0.05, 1.15)
     ax_bot.set_xlabel("Axial Distance from Tool Tip $\\Delta x = x - x_{\\mathrm{tool}}$ (mm)", color="#e2e8f0", fontsize=11)
     ax_bot.set_ylabel("Normalised Drop $w / d_{\\mathrm{peak}}$", color="#e2e8f0", fontsize=11)
     ax_bot.set_title(
-        "Cap Effect: Normalized Peak Profiles (Air Narrows the Profile: Near-Tool 15-21 mm Ratio 0.64 Capped vs 0.79 Uncapped)",
+        f"Cap Effect: Normalized Peak Profiles (Near-Tool 15-21 mm Data Ratio {r15_cap_data:.2f} Capped vs {r15_uncap_data:.2f} Uncapped)",
         color="#f8fafc",
         fontsize=11,
         fontweight="bold",
@@ -718,92 +751,175 @@ def render_cap_effect(
     return out_path
 
 
+def _load_eval_metrics(metrics_path: Path = Path("out/eval/metrics.csv")) -> Dict[str, Dict[str, str]]:
+    """Load evaluation summary table keyed by clip/row identifier."""
+    rows: Dict[str, Dict[str, str]] = {}
+    if metrics_path.exists():
+        with open(metrics_path, "r", encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                rows[row["clip"]] = row
+    return rows
+
+
+def _compute_clip_near_ratio(clip_id: str, tracks_dir: Path = Path("out/tracks")) -> float:
+    """Compute near-tool (15-21 mm) normalized peak drop ratio from tracked data."""
+    tr_mm = np.load(tracks_dir / f"{clip_id}_mm.npz", allow_pickle=True)
+    k_pk = int(np.argmax(tr_mm["d_mm"]))
+    pk_d = float(tr_mm["d_mm"][k_pk])
+    dx = np.abs(tr_mm["stations_mm"] - float(tr_mm["tool_x_med_mm"]))
+    m15 = (dx >= 15.0) & (dx <= 21.0)
+    return float(np.mean((tr_mm["u_mm"][k_pk] / pk_d)[m15]))
+
+
 def render_all_concatenated(
     out_path: Path,
     fresh_161747_path: Path,
     fresh_001711_path: Path,
     cap_effect_path: Path,
     fps: float = 29.97,
+    params_path: Path = Path("out/fit/params.json"),
+    metrics_path: Path = Path("out/eval/metrics.csv"),
+    sim_summary_path: Path = Path("out/sim/compare_press_x40_d14_pen/summary.json"),
+    tracks_dir: Path = Path("out/tracks"),
+    force: bool = False,
 ) -> Path:
-    """Concatenate demo videos with high-contrast informative title cards into `all.mp4`."""
+    """Concatenate demo videos with dynamically populated title cards into `all.mp4`."""
     print("Generating all.mp4 with title cards...")
     out_dir = out_path.parent
     cards_dir = out_dir / "cards"
     cards_dir.mkdir(parents=True, exist_ok=True)
 
+    with open(params_path, "r", encoding="utf-8") as f:
+        params = json.load(f)
+    metrics = _load_eval_metrics(metrics_path)
+    sim_summary: Optional[Dict[str, Any]] = None
+    if sim_summary_path.exists():
+        with open(sim_summary_path, "r", encoding="utf-8") as f:
+            sim_summary = json.load(f)
+
+    rho_used = float(params.get("rho_used", params["rho_hat"]))
+    kappa_hat = float(params["kappa_hat"])
+    rho_id = bool(params.get("rho_identified", True))
+    aniso_desc = (
+        f"anisotropic bending (rho = {rho_used:.2f} at L = 220 mm)"
+        if (rho_id and rho_used > 2.0)
+        else f"bending stiffness ratio rho = {rho_used:.2f}"
+    )
+
     # 1. Main intro title card
     card1 = create_title_card(
         title="Learning PET Bottle Deformation from Phone Video",
-        subtitle="Part 2 Brief: Physics-Calibrated Shell-Springs + Gas Overpressure",
+        subtitle="Held-Contact Shell-Springs + Adiabatic Gas Overpressure (Converged Equilibria)",
         bullets=[
             "Data: 30 fps phone video of capped & uncapped 1 L PET bottles",
-            "Model: Discrete triangle-mesh shell with anisotropic bending springs",
-            "Internal Air: Adiabatic relation p * V^1.4 = const (gamma = 1.4)",
+            f"Model: Discrete triangle-mesh shell with {aniso_desc}",
+            f"Calibrated hoop stiffness kappa = {kappa_hat:.3f} N/mm | Internal air p * V^1.4 = const",
             "Predicting 3D deformation field from tracked tool tip trajectory",
         ],
         badge="Evaluation Pipeline",
     )
 
-    # 2. Fresh instance title card
+    # 2. Fresh instance title card (161747)
+    r161747 = metrics.get("161747", {})
+    m161747 = float(r161747.get("rmse_model_mm", 0.0))
+    b0_161747 = float(r161747.get("rmse_b0_mm", 0.0))
     card2 = create_title_card(
         title="Part 1: Fresh Instance Generalization",
         subtitle="Held-out Clip 161747 (Capped, Pen Indenter, New Position)",
         bullets=[
-            "Tracking input: Pen tip drop d(t) driving top spherical contact",
+            "Tracking input: Pen tip drop d(t) driving held top-vertex contact",
+            f"Spatial RMSE: {m161747:.2f} mm vs {b0_161747:.2f} mm baseline B0",
             "Left: Observed silhouette edge (green) vs Model predicted edge (red)",
-            "Middle: 3D cylinder mesh colored by radial displacement magnitude",
-            "Right: Real-time spatial RMSE vs time with tracking cursor",
+            "Middle: 3D cylinder mesh displacement | Right: Spatial RMSE vs time",
         ],
         badge="Part 1: Test Clip 161747",
     )
 
     # 3. Transition card for 001711
+    r001711 = metrics.get("001711", {})
+    m001711 = float(r001711.get("rmse_model_mm", 0.0))
+    b0_001711 = float(r001711.get("rmse_b0_mm", 1.0))
+    red_001711 = 100.0 * (1.0 - m001711 / max(b0_001711, 1e-6))
     card3 = create_title_card(
         title="Part 1 (Continued): Uncapped Generalization",
         subtitle="Held-out Clip 001711 (Uncapped, Pen Indenter, Zero Gauge Pressure)",
         bullets=[
             "Validates model under pure bending without internal air stiffening",
-            "Model achieves 1.41 mm RMSE vs 5.43 mm baseline B0 (74% error reduction)",
-            "Quasi-static equilibrium solver tracks continuous deformation branch",
+            f"Model achieves {m001711:.2f} mm RMSE vs {b0_001711:.2f} mm baseline B0 ({red_001711:.0f}% error reduction)",
+            "Converged held-contact solver tracks static equilibrium branch",
         ],
         badge="Part 1: Test Clip 001711",
     )
 
     # 4. Cap effect title card
+    r15_cap_001531 = _compute_clip_near_ratio("001531", tracks_dir)
+    r15_uncap_001656 = _compute_clip_near_ratio("001656", tracks_dir)
     card4 = create_title_card(
         title="Part 2: Cap Effect Comparison",
         subtitle="001531 (Capped, Air On) vs 001656 (Uncapped, Pure Shell Bending)",
         bullets=[
             "Side-by-side video overlays: observed edge (green) & predicted edge (red)",
             "Bottom panel: Normalized peak profiles data vs model on same axes",
-            "Internal air pressure narrows the deformation profile",
-            "Near-tool drop ratio (15-21 mm): 0.64 capped vs 0.79 uncapped in data",
+            "Internal air pressure narrows the deformation profile near the tool",
+            f"Near-tool drop ratio (15-21 mm): {r15_cap_001531:.2f} capped (001531) vs {r15_uncap_001656:.2f} uncapped (001656)",
         ],
         badge="Part 2: Cap Effect",
     )
 
     # 5. Standalone simulation card
+    if sim_summary and "cap_on" in sim_summary and "cap_off" in sim_summary:
+        s_in = sim_summary.get("inputs", {})
+        s_on = sim_summary["cap_on"]
+        s_off = sim_summary["cap_off"]
+        x_sim = float(s_in.get("press_at_mm", 40.0))
+        d_sim = float(s_in.get("depth_mm", 14.0))
+        sim_subtitle = (
+            f"Standalone simulation: press at {x_sim:.0f} mm from base, "
+            f"{d_sim:.0f} mm depth, cap on vs off (model prediction, no video)."
+        )
+        sim_bullets = [
+            f"Quasi-static loading from 0 to {d_sim:.0f} mm and elastic recovery back to 0 mm",
+            f"Left: Capped (Air On, pred. force {float(s_on['peak_force_N']):.2f} N [unverified], Delta p = {float(s_on['peak_overpressure_kPa']):.2f} kPa)",
+            f"Right: Uncapped (Air Off, pred. force {float(s_off['peak_force_N']):.2f} N [unverified], Delta p = {float(s_off['peak_overpressure_kPa']):.2f} kPa)",
+            "Internal air stiffens bottle and narrows profile near the tool",
+        ]
+    else:
+        sim_subtitle = "Standalone simulation: held-contact prediction, cap on vs off (model prediction, no video)."
+        sim_bullets = [
+            "Quasi-static loading and elastic recovery back to rest",
+            "Forces are unverified model predictions (no force sensor)",
+        ]
     card_sim = create_title_card(
         title="Part 3: Standalone Simulation",
-        subtitle="Standalone simulation: press at 40 mm from base, 14 mm depth, cap on vs off (model prediction, no video).",
-        bullets=[
-            "Quasi-static loading from 0 to 14 mm and elastic recovery back to 0 mm",
-            "Left: Capped (Air On, peak force 11.60 N, Delta p = 1.52 kPa)",
-            "Right: Uncapped (Air Off, peak force 8.93 N, Delta p = 0.0 kPa)",
-            "Internal air stiffens bottle and narrows profile near the tool",
-        ],
+        subtitle=sim_subtitle,
+        bullets=sim_bullets,
         badge="Part 3: Simulation",
     )
 
-    # 6. Conclusion card
+    # 6. Conclusion card (dynamically from metrics.csv)
+    hl = metrics.get("HEADLINE_ALL_TEST_CLIPS", {})
+    hl_m = float(hl.get("rmse_model_mm", 0.0))
+    hl_b1 = float(hl.get("rmse_b1_mm", 0.0))
+    hl_b0 = float(hl.get("rmse_b0_mm", 0.0))
+    test_clips = [
+        k for k, v in metrics.items()
+        if v.get("cap") in ("on", "off") and v.get("tool") in ("pen", "finger") and v.get("rmse_model_mm", "") != ""
+    ]
+    pen_clips = [k for k in test_clips if metrics[k]["tool"] == "pen"]
+    finger_clips = [k for k in test_clips if metrics[k]["tool"] == "finger"]
+    pen_wins = [k for k in pen_clips if float(metrics[k]["rmse_model_mm"]) < float(metrics[k]["rmse_b1_mm"])]
+    finger_wins = [k for k in finger_clips if float(metrics[k]["rmse_model_mm"]) < float(metrics[k]["rmse_b1_mm"])]
+    r161853 = metrics.get("161853", {})
+    r15_161853_m = float(r161853.get("ratio_15_21_model", 0.0))
+    r15_161853_d = float(r161853.get("ratio_15_21_data", 0.0))
     card5 = create_title_card(
         title="Evaluation Summary & Key Results",
-        subtitle="Benchmark on Held-Out Test Suite",
+        subtitle=f"Benchmark on Held-Out Test Suite ({len(test_clips)} clips)",
         bullets=[
-            "Headline: Model 1.95 mm vs B1 1.84 mm over all test clips",
-            "B1 (template) wins on all 4 pen clips",
-            "The physics model wins on both finger clips (new indenter)",
-            "161853 has camera shift and its near-tool shape is still missed (0.73 sim vs 0.45 data)",
+            f"Headline: Model {hl_m:.2f} mm vs B1 {hl_b1:.2f} mm (B0 {hl_b0:.2f} mm) over {len(test_clips)} test clips",
+            f"Pen clips: Model beats B1 on {len(pen_wins)}/{len(pen_clips)} ({', '.join(pen_wins)}); B1 wins {len(pen_clips) - len(pen_wins)}/{len(pen_clips)}",
+            f"Finger clips (new indenter): Model beats B1 on {len(finger_wins)}/{len(finger_clips)} ({', '.join(finger_wins)})",
+            f"161853 has camera shift and misses near-tool shape ({r15_161853_m:.2f} sim vs {r15_161853_d:.2f} data)",
         ],
         badge="Conclusions",
     )
@@ -829,7 +945,7 @@ def render_all_concatenated(
     # Check for standalone simulation segment
     sim_comp_src = Path("out/sim/compare_press_x40_d14_pen/sim.mp4")
     sim_segment_path = cards_dir / "sim_segment.mp4"
-    if sim_comp_src.exists() and not (sim_segment_path.exists() and sim_segment_path.stat().st_size > 10000):
+    if sim_comp_src.exists() and (force or not (sim_segment_path.exists() and sim_segment_path.stat().st_size > 10000)):
         subprocess.run(
             [
                 "ffmpeg",
@@ -839,9 +955,11 @@ def render_all_concatenated(
                 "-i",
                 str(sim_comp_src),
                 "-vf",
-                "scale=1920:720:force_original_aspect_ratio=decrease,pad=1920:720:(ow-iw)/2:(oh-ih)/2:color=#0f172a",
+                f"scale=1920:720:force_original_aspect_ratio=decrease,pad=1920:720:(ow-iw)/2:(oh-ih)/2:color=#0f172a,fps={fps}",
                 "-r",
                 str(fps),
+                "-video_track_timescale",
+                "11988",
                 "-c:v",
                 "libx264",
                 "-pix_fmt",
@@ -853,43 +971,43 @@ def render_all_concatenated(
             check=True,
         )
 
-    # Build concat file for ffmpeg
-    def rel_to_cards(p: Path) -> str:
-        return os.path.relpath(p, cards_dir)
+    segments: List[Path] = [
+        c1_path,
+        c2_path,
+        fresh_161747_path,
+        c3_path,
+        fresh_001711_path,
+        c4_path,
+        cap_effect_path,
+    ]
+    if sim_segment_path.exists():
+        segments.extend([c_sim_path, sim_segment_path])
+    segments.append(c5_path)
 
-    concat_list_path = cards_dir / "concat_list.txt"
-    with open(concat_list_path, "w", encoding="utf-8") as f:
-        f.write(f"file '{rel_to_cards(c1_path)}'\n")
-        f.write(f"file '{rel_to_cards(c2_path)}'\n")
-        f.write(f"file '{rel_to_cards(fresh_161747_path)}'\n")
-        f.write(f"file '{rel_to_cards(c3_path)}'\n")
-        f.write(f"file '{rel_to_cards(fresh_001711_path)}'\n")
-        f.write(f"file '{rel_to_cards(c4_path)}'\n")
-        f.write(f"file '{rel_to_cards(cap_effect_path)}'\n")
-        if sim_segment_path.exists():
-            f.write(f"file '{rel_to_cards(c_sim_path)}'\n")
-            f.write(f"file '{rel_to_cards(sim_segment_path)}'\n")
-        f.write(f"file '{rel_to_cards(c5_path)}'\n")
-
-    cmd = [
-        "ffmpeg",
-        "-y",
-        "-f",
-        "concat",
-        "-safe",
-        "0",
-        "-i",
-        str(concat_list_path),
+    # Concatenate with filter_complex so segment timescale differences cannot stretch DTS/duration.
+    cmd: List[str] = ["ffmpeg", "-y"]
+    for seg in segments:
+        cmd.extend(["-i", str(seg)])
+    filter_inputs = "".join(f"[{i}:v]fps={fps},setsar=1[v{i}];" for i in range(len(segments)))
+    concat_inputs = "".join(f"[v{i}]" for i in range(len(segments)))
+    filter_complex = f"{filter_inputs}{concat_inputs}concat=n={len(segments)}:v=1:a=0[outv]"
+    cmd.extend([
+        "-filter_complex",
+        filter_complex,
+        "-map",
+        "[outv]",
         "-c:v",
         "libx264",
         "-pix_fmt",
         "yuv420p",
+        "-video_track_timescale",
+        "11988",
         "-crf",
         "20",
         "-preset",
         "medium",
         str(out_path),
-    ]
+    ])
     res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if res.returncode != 0:
         raise RuntimeError(f"FFmpeg concat failed: {res.stderr.decode('utf-8')}")
@@ -903,26 +1021,71 @@ def run_demo_pipeline(out_dir: Path = Path("out/demo"), force: bool = False) -> 
     out_dir.mkdir(parents=True, exist_ok=True)
     params, cfg = load_inputs()
 
-    rho = float(params["rho_hat"])
+    rho = float(params.get("rho_used", params["rho_hat"]))
     kappa = float(params["kappa_hat"])
-    sim = StaticSimulator()
+    p_atm = float(cfg.get("p_atm_mpa", 0.101325))
+    V0 = float(cfg["bottle"].get("volume_mm3", 1.0e6))
+    gas_exp = float(cfg.get("gas_exponent", 1.4))
+    sim = StaticSimulator(p_atm=p_atm, V0=V0, gas_exponent=gas_exp)
     fps = float(cfg.get("fps", 29.97))
 
-    # 1. Fresh instance individual videos
     p_161747 = out_dir / "fresh_instance_161747.mp4"
-    if force or not (p_161747.exists() and p_161747.stat().st_size > 100000):
-        render_fresh_instance_clip("161747", p_161747, sim, rho, kappa, cfg, fps=fps)
+    p_001711 = out_dir / "fresh_instance_001711.mp4"
+    p_fresh = out_dir / "fresh_instance.mp4"
+    p_cap = out_dir / "cap_effect.mp4"
+    p_all = out_dir / "all.mp4"
+
+    need_161747 = force or not (p_161747.exists() and p_161747.stat().st_size > 100000)
+    need_001711 = force or not (p_001711.exists() and p_001711.stat().st_size > 100000)
+    need_cap = force or not (p_cap.exists() and p_cap.stat().st_size > 100000)
+
+    # Precompute needed simulation grids in parallel across up to 4 CPU workers
+    precomp: Dict[str, Tuple[np.ndarray, List[np.ndarray], np.ndarray]] = {}
+    worker_tasks: List[Tuple[Any, ...]] = []
+    tracks_dir = Path("out/tracks")
+
+    def add_task(key: str, clip_id: str, air_on: bool, n_pts: int) -> None:
+        c_cfg = cfg["clips"][clip_id]
+        tr = np.load(tracks_dir / f"{clip_id}.npz", allow_pickle=True)
+        tr_mm = np.load(tracks_dir / f"{clip_id}_mm.npz", allow_pickle=True)
+        tool_type = str(c_cfg.get("tool", "pen"))
+        r_tool = float(cfg.get("finger_radius_mm", 8.0) if tool_type == "finger" else cfg.get("pen_radius_mm", 2.5))
+        if clip_id in ("001531", "001656"):
+            max_d = float(np.nanmax(tr_mm["d_mm"]))
+        else:
+            c_idx = np.where(tr["contact"])[0]
+            max_d = float(np.nanmax(tr_mm["tip_drop_mm"][c_idx])) if len(c_idx) > 0 else 5.0
+        worker_tasks.append((
+            key, p_atm, V0, gas_exp, max_d,
+            float(tr_mm["tool_x_med_mm"]), kappa, rho, air_on, r_tool, n_pts,
+        ))
+
+    if need_161747:
+        add_task("161747", "161747", bool(cfg["clips"]["161747"].get("cap", True)), 25)
+    if need_001711:
+        add_task("001711", "001711", bool(cfg["clips"]["001711"].get("cap", False)), 25)
+    if need_cap:
+        add_task("001531", "001531", True, 20)
+        add_task("001656", "001656", False, 20)
+
+    if worker_tasks:
+        print(f"Precomputing {len(worker_tasks)} demo simulation grids in parallel...")
+        with ProcessPoolExecutor(max_workers=min(4, len(worker_tasks))) as ex:
+            for k, res in ex.map(_demo_precompute_worker, worker_tasks):
+                precomp[k] = res
+
+    # 1. Fresh instance individual videos
+    if need_161747:
+        render_fresh_instance_clip("161747", p_161747, sim, rho, kappa, cfg, fps=fps, precomputed=precomp.get("161747"))
     else:
         print(f"Clip 161747 video already exists: {p_161747}")
 
-    p_001711 = out_dir / "fresh_instance_001711.mp4"
-    if force or not (p_001711.exists() and p_001711.stat().st_size > 100000):
-        render_fresh_instance_clip("001711", p_001711, sim, rho, kappa, cfg, fps=fps)
+    if need_001711:
+        render_fresh_instance_clip("001711", p_001711, sim, rho, kappa, cfg, fps=fps, precomputed=precomp.get("001711"))
     else:
         print(f"Clip 001711 video already exists: {p_001711}")
 
     # 2. Fresh instance concatenated video
-    p_fresh = out_dir / "fresh_instance.mp4"
     if force or not (p_fresh.exists() and p_fresh.stat().st_size > 100000):
         concat_txt = out_dir / "concat_fresh.txt"
         with open(concat_txt, "w") as f:
@@ -938,16 +1101,18 @@ def run_demo_pipeline(out_dir: Path = Path("out/demo"), force: bool = False) -> 
         print(f"Fresh instance concatenated video already exists: {p_fresh}")
 
     # 3. Cap effect comparison video
-    p_cap = out_dir / "cap_effect.mp4"
-    if force or not (p_cap.exists() and p_cap.stat().st_size > 100000):
-        render_cap_effect(p_cap, sim, rho, kappa, cfg, fps=fps)
+    if need_cap:
+        render_cap_effect(
+            p_cap, sim, rho, kappa, cfg, fps=fps,
+            precomputed_cap=precomp.get("001531"),
+            precomputed_uncap=precomp.get("001656"),
+        )
     else:
         print(f"Cap effect video already exists: {p_cap}")
 
     # 4. Master video with title cards
-    p_all = out_dir / "all.mp4"
     if force or not (p_all.exists() and p_all.stat().st_size > 100000):
-        render_all_concatenated(p_all, p_161747, p_001711, p_cap, fps=fps)
+        render_all_concatenated(p_all, p_161747, p_001711, p_cap, fps=fps, force=force)
     else:
         print(f"Master video already exists: {p_all}")
 

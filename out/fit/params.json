@@ -1,20 +1,55 @@
 {
-  "rho_hat": 7.027550421434977,
-  "kappa_hat": 0.7566852165911973,
-  "loss_stage1": 0.8084512129626826,
-  "loss_stage2": 0.6460406162120678,
+  "solver": {
+    "gtol": 1e-06,
+    "maxiter": 20000,
+    "max_grad_tol_N": 0.0001,
+    "converged": true,
+    "contact": "held",
+    "n_solves_fit": 3247,
+    "n_retries_fit": 173,
+    "zero_failed_solves": true
+  },
+  "rho_identified": true,
+  "rho_opt_stage1": 27.146009487627737,
+  "rho_used": 27.146009487627737,
+  "rho_hat": 27.146009487627737,
+  "rho_max_delta_chi2_rescaled": 39.8362475158494,
+  "rho_chi2_min": 16681.562744140625,
+  "rho_dof": 370,
+  "rho_chi2_red": 45.08530471389358,
+  "kappa_hat": 0.23331370271174656,
+  "loss_stage1": 0.4644650281921551,
+  "loss_stage1_opt": 0.4644650281921551,
+  "loss_stage2": 0.3550856580179204,
   "b0_loss_stage1": 2.0908330727137647,
   "b0_loss_stage2": 1.8017343541301747,
+  "kappa_chi2_min": 14176.57876586914,
+  "kappa_dof": 377,
+  "kappa_chi2_red": 37.60365720389692,
   "kappa_ci_68": [
-    0.6053481732729579,
-    0.9080222599094366
+    0.2273817827488906,
+    0.24049590835949713
   ],
   "kappa_ci_95": [
-    0.09907392172417857,
-    0.09907392172417857
+    0.20903914961342918,
+    0.2647610045385373
   ],
-  "peak_force_N": 11.96085941055438,
-  "peak_overpressure_kPa": 1.7003019281174732,
+  "kappa_interval_closed_68": true,
+  "kappa_interval_closed_95": true,
+  "kappa_closed_low_68": true,
+  "kappa_closed_high_68": true,
+  "kappa_closed_low_95": true,
+  "kappa_closed_high_95": true,
+  "peak_force_N": 7.542429675743358,
+  "peak_overpressure_kPa": 1.83651729049248,
+  "peak_forces_per_clip": {
+    "001531": 4.85175756565651,
+    "001730": 10.233101785830208
+  },
+  "peak_dp_per_clip": {
+    "001531": 1.3814270188185485,
+    "001730": 2.2916075621664116
+  },
   "model_free_air_estimate": {
     "001531": {
       "dV_oval_mm3": 11827.3408203125,
@@ -29,18 +64,86 @@
       "dp_chord_kPa": 3.969161478515624
     }
   },
+  "sensitivity_rho": {
+    "rho_0_5": {
+      "rho": 0.5,
+      "kappa_hat": 4.049183282568506,
+      "loss_stage2": 0.40849197604668835,
+      "chi2_min": 16229.665283203125,
+      "chi2_red": 43.049510035021555,
+      "kappa_ci_68": [
+        3.7678737049925664,
+        4.440306829619748
+      ],
+      "kappa_ci_95": [
+        2.998809015103715,
+        6.761657480426626
+      ],
+      "kappa_interval_closed_95": true,
+      "kappa_closed_low_95": true,
+      "kappa_closed_high_95": true,
+      "peak_force_N": 6.948959784535952,
+      "peak_overpressure_kPa": 1.503615157424143
+    },
+    "rho_1_0": {
+      "rho": 1.0,
+      "kappa_hat": 5.61946160068989,
+      "loss_stage2": 0.404210471602344,
+      "chi2_min": 16101.4072265625,
+      "chi2_red": 42.709302988229446,
+      "kappa_ci_68": [
+        3.953388561753304,
+        6.392947567068508
+      ],
+      "kappa_ci_95": [
+        2.7239709992074834,
+        9.503963208556632
+      ],
+      "kappa_interval_closed_95": true,
+      "kappa_closed_low_95": true,
+      "kappa_closed_high_95": true,
+      "peak_force_N": 8.680274609708288,
+      "peak_overpressure_kPa": 1.758639911396652
+    },
+    "rho_7_0": {
+      "rho": 7.0,
+      "kappa_hat": 0.4999400100722663,
+      "loss_stage2": 0.37657596320702286,
+      "chi2_min": 14980.785034179688,
+      "chi2_red": 39.73683032938909,
+      "kappa_ci_68": [
+        0.4847390439000485,
+        0.5576838448474392
+      ],
+      "kappa_ci_95": [
+        0.4385531586666633,
+        0.6678246255601916
+      ],
+      "kappa_interval_closed_95": true,
+      "kappa_closed_low_95": true,
+      "kappa_closed_high_95": true,
+      "peak_force_N": 5.724526279220562,
+      "peak_overpressure_kPa": 1.5095059020518096
+    }
+  },
   "sensitivity_length": {
     "L_200": {
-      "rho": 4.452970081925674,
-      "kappa": 1.1450097232951004
+      "rho_opt": 0.10838702247472584,
+      "loss_stage1_at_rho_opt": 0.4891890117100307,
+      "kappa_at_rho_opt": 1.5480149259287308,
+      "kappa_at_rho_used": 0.2055635503892103,
+      "loss_stage2_at_rho_used": 0.3696113099496831
     },
     "L_240": {
-      "rho": 1.4837218080471455,
-      "kappa": 1.1838199602180377
+      "rho_opt": 0.18971564452863451,
+      "loss_stage1_at_rho_opt": 0.4643303056290208,
+      "kappa_at_rho_opt": 5.192120221656611,
+      "kappa_at_rho_used": 0.20425318864590386,
+      "loss_stage2_at_rho_used": 0.36632644688641586
     }
   },
   "sensitivity_gas_exponent_n1": {
-    "kappa_n1": 1.1450097232951004,
-    "kappa_ratio": 1.5131916128258356
+    "kappa_n1": 0.2120031831050504,
+    "kappa_ratio": 0.9086615172661985
   }
 }

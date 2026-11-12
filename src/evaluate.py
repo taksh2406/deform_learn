@@ -24,8 +24,10 @@ Outputs:
   out/eval/<clip>_peak_profile.png
 """
 
+from concurrent.futures import ProcessPoolExecutor
 import csv
 import json
+import os
 from pathlib import Path
 import sys
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -43,6 +45,8 @@ from src.sim import StaticSimulator
 TEST_CLIPS = ["001711", "161655", "161708", "161747", "161802", "161904", "161824", "161853"]
 FIT_CLIPS_UNCAPPED = ["001614", "001656"]
 FIT_CLIPS_CAPPED = ["001531", "001730"]
+DEFAULT_GTOL = 1e-6
+DEFAULT_MAXITER = 20000
 
 
 def build_b1_templates(
@@ -131,8 +135,8 @@ def evaluate_clip(
         rho=rho,
         air_on=air_on,
         r_tool_mm=r_tool,
-        gtol=1e-4,
-        maxiter=120,
+        gtol=DEFAULT_GTOL,
+        maxiter=DEFAULT_MAXITER,
     )
     w_sim_seq = np.array([sim.extract_profile(sol, stations_mm=stations_mm, mode="top_vertex") for sol in sols])
 
@@ -244,6 +248,50 @@ def evaluate_clip(
     }
 
 
+def _worker_eval_clip(args: Tuple[Any, ...]) -> Dict[str, Any]:
+    """Worker evaluating a single test clip in an isolated process."""
+    clip, rho, kappa, clip_cfg, tracks_dir_str, out_dir_str, log_path_str = args
+    tracks_dir = Path(tracks_dir_str)
+    out_dir = Path(out_dir_str)
+    f_uncap, f_cap = build_b1_templates(tracks_dir)
+    is_cap = bool(clip_cfg.get("cap", False))
+    b1_fun = f_cap if is_cap else f_uncap
+    sim = StaticSimulator(log_path=Path(log_path_str))
+    res = evaluate_clip(
+        clip,
+        sim,
+        rho=rho,
+        kappa=kappa,
+        b1_template=b1_fun,
+        clip_cfg=clip_cfg,
+        tracks_dir=tracks_dir,
+        out_dir=out_dir,
+    )
+    # G4.3 explicit rest-frame check against rest_frames window in config/clips.yaml
+    data = np.load(tracks_dir / f"{clip}_mm.npz", allow_pickle=True)
+    r0, r1 = clip_cfg["rest_frames"]
+    s = float(data["s"])
+    tx = float(data["tool_x_med_mm"])
+    st = data["stations_mm"]
+    r_tool = 8.0 if str(clip_cfg.get("tool", "pen")) == "finger" else 2.5
+    sol_rest = sim.solve_snapshot(
+        0.0,
+        tool_x_mm=tx,
+        kappa=kappa if is_cap else 1.0,
+        rho=rho,
+        air_on=is_cap,
+        r_tool_mm=r_tool,
+        gtol=DEFAULT_GTOL,
+        maxiter=DEFAULT_MAXITER,
+    )
+    w_rest_sim = sim.extract_profile(sol_rest, stations_mm=st, mode="top_vertex")
+    w_rest_obs = data["w_obs_mm"][int(r0):int(r1) + 1]
+    err_px = np.abs(w_rest_obs - w_rest_sim[None, :]) * s
+    res["_rest_med_px"] = float(np.nanmedian(err_px))
+    res["_rest_mean_px"] = float(np.nanmean(err_px))
+    return res
+
+
 def run_evaluation(
     params_path: Path = Path("out/fit/params.json"),
     clips_cfg_path: Path = Path("config/clips.yaml"),
@@ -261,32 +309,56 @@ def run_evaluation(
     with open(clips_cfg_path) as f:
         cfg = yaml.safe_load(f)
 
-    rho = float(params["rho_hat"])
+    rho = float(params.get("rho_used", params["rho_hat"]))
     kappa = float(params["kappa_hat"])
-    print(f"Loaded calibrated parameters: rho_hat = {rho:.4f}, kappa_hat = {kappa:.4f} N/mm")
+    print(f"Loaded calibrated parameters: rho_used = {rho:.4f}, kappa_hat = {kappa:.4f} N/mm")
 
-    f_uncap, f_cap = build_b1_templates(tracks_dir)
     sim = StaticSimulator()
+    solve_log_path = sim.log_path
+    solves_before = 0
+    if solve_log_path.exists():
+        with open(solve_log_path) as f:
+            solves_before = max(0, sum(1 for _ in f) - 1)
+
+    max_workers = min(len(TEST_CLIPS), max(1, os.cpu_count() or 1), 8)
+    print(f"\n--- Running Evaluation on {len(TEST_CLIPS)} Test Clips ({max_workers} parallel workers, gtol={DEFAULT_GTOL}, maxiter={DEFAULT_MAXITER}) ---")
+    tasks = [
+        (clip, rho, kappa, cfg["clips"][clip], str(tracks_dir), str(out_dir), str(solve_log_path))
+        for clip in TEST_CLIPS
+    ]
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        raw_results = list(executor.map(_worker_eval_clip, tasks))
 
     results: List[Dict[str, Any]] = []
-    print("\n--- Running Evaluation on Test Clips ---")
-    for clip in TEST_CLIPS:
-        c_cfg = cfg["clips"][clip]
-        is_cap = bool(c_cfg.get("cap", False))
-        b1_fun = f_cap if is_cap else f_uncap
-
-        res = evaluate_clip(
-            clip,
-            sim,
-            rho=rho,
-            kappa=kappa,
-            b1_template=b1_fun,
-            clip_cfg=c_cfg,
-            tracks_dir=tracks_dir,
-            out_dir=out_dir,
-        )
+    for res in raw_results:
+        clip = res["clip"]
+        rest_med = res.pop("_rest_med_px")
+        rest_mean = res.pop("_rest_mean_px")
+        assert rest_mean <= 2.0, f"G4.3 failed on {clip}: mean rest error {rest_mean:.3f} px > 2 px"
         results.append(res)
-        print(f"  {clip} ({'cap' if is_cap else 'uncap'}, {c_cfg['tool']}): RMSE model={res['rmse_model_mm']:.2f} mm, B0={res['rmse_b0_mm']:.2f} mm, B1={res['rmse_b1_mm']:.2f} mm, drift={res['drift_timing']}")
+        print(
+            f"  {clip} (cap={res['cap']}, {res['tool']}): RMSE model={res['rmse_model_mm']:.2f} mm, "
+            f"B0={res['rmse_b0_mm']:.2f} mm, B1={res['rmse_b1_mm']:.2f} mm, drift={res['drift_timing']}, "
+            f"rest={rest_med:.2f}px med / {rest_mean:.2f}px mean"
+        )
+
+    if solve_log_path.exists():
+        with open(solve_log_path) as f:
+            rows = list(csv.DictReader(f))
+        new_rows = rows[solves_before:]
+        pending: Dict[Tuple[str, ...], int] = {}
+        for r in new_rows:
+            ok_r = r["success"] == "True" and float(r["max_grad_free"]) < 1e-4
+            att = int(r["attempt"])
+            key = (r["caller"], r["tip_drop_mm"], r["tool_x_mm"], r["kappa"], r["rho"], r["air_on"], r["n_gas"])
+            if att == 1:
+                if not ok_r:
+                    pending[key] = pending.get(key, 0) + 1
+            elif ok_r:
+                pending[key] = max(0, pending.get(key, 0) - 1)
+        n_unrecovered = sum(pending.values())
+        assert n_unrecovered == 0, f"G4.1 failed: {n_unrecovered} unrecovered failed solves in evaluation!"
+        print(f"G4.1 solve check: {len(new_rows)} logged eval rows, {n_unrecovered} unrecovered failures")
 
     # =========================================================================
     # Aggregation & Stratification
